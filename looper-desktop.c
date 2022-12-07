@@ -1,24 +1,41 @@
 #define MINIAUDIO_IMPLEMENTATION
 
-#include "bcm2835.h"
 #include "miniaudio.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/select.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include <stdbool.h>
-
-// Arrange button between pin 37 and ground (PULL UP)
-#define PIN RPI_V2_GPIO_P1_37
 
 // SPACE BAR IS OUR BUTTON
 #define BUFFERSIZE 2
+// we are using _kbhit here to mimic a GPIO signal on PI
+// it's just nice to develop most the functionality on your computer first
+// -- https://www.flipcode.com/archives/_kbhit_for_Linux.shtml
+int _kbhit() {
+  char buffer[BUFFERSIZE];
+  static const int STDIN = 0;
+  static bool initialized = false;
 
-// this is a simple input debounce: https://www.e-tinkers.com/2021/05/the-simplest-button-debounce-solution/
-bool buttonPressed()  {
-  static uint16_t state = 0;
-  state = (state<<1) | bcm2835_gpio_lev(PIN) | 0xfe00;
-  return (state == 0xff00);
+  if (! initialized) {
+    // Use termios to turn off line buffering
+    struct termios term;
+    tcgetattr(STDIN, &term);
+    term.c_lflag &= ~ICANON;
+    tcsetattr(STDIN, TCSANOW, &term);
+    setbuf(stdin, NULL);
+    initialized = true;
+  }
+
+  int bytesWaiting;
+  ioctl(STDIN, FIONREAD, &bytesWaiting);
+  if(bytesWaiting == true) {
+    fgets(buffer, BUFFERSIZE , stdin);
+  }
+  return bytesWaiting;
 }
+
 
 struct state;
 typedef void state_fn(struct state *);
@@ -58,7 +75,7 @@ void data_callbackOutput(ma_device* pDevice, void* pOutput, const void* pInput, 
 
 
 void enterIdle(struct state * state){
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = enterRecording;
   }
 }
@@ -81,9 +98,9 @@ void enterRecording(struct state * state) {
   inputDeviceConfig.capture.format   = state->inputEncoder->config.format;
   inputDeviceConfig.capture.channels = state->inputEncoder->config.channels;
   // ** Uncomment the Following lines to specify an ALSA sound input device other than the default
-  ma_device_id inputDeviceId;
-  strcpy(inputDeviceId.alsa, "hw");
-  inputDeviceConfig.capture.pDeviceID = &inputDeviceId;
+  // ma_device_id inputDeviceId;
+  // strcpy(inputDeviceId.alsa, "hw");
+  // inputDeviceConfig.capture.pDeviceID = &inputDeviceId;
   inputDeviceConfig.sampleRate       = state->inputEncoder->config.sampleRate;
   inputDeviceConfig.dataCallback     = data_callback;
   inputDeviceConfig.pUserData        = state->inputEncoder;
@@ -105,7 +122,7 @@ void enterRecording(struct state * state) {
 }
 
 void recording(struct state * state) {
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = leaveRecording;
   }
 }
@@ -153,7 +170,7 @@ void enterLoop(struct state * state) {
 }
 
 void looping(struct state * state) {
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = leaveLoop;
   }
 }
@@ -172,13 +189,6 @@ int main(int argc, char** argv)
   ma_decoder outputDecoder;
   ma_device inputDevice;
   ma_device outputDevice;
-
-  // Init PI Library
-  if (!bcm2835_init()) return 1;
-
-  // Set the pin to be an output
-  bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
-  bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_UP);
 
   struct state state = { enterIdle, &outputDecoder, &inputEncoder, &inputDevice, &outputDevice };
   printf("Entering Idle State\n");

@@ -2,16 +2,20 @@
 
 A State-Machine Based Looper Written in C
 
+## Description
+
+A very simple program to build upon that establishes a state-machine pattern for audio looping. There are two versions, looper.c for the raspberry pi, and looper-desktop for testing the overall state machine without having to connect your pi and test there.
+
 ## Compilation
 
 on OSX:
-`cc looper.c -o looper`
+`cc looper-desktop.c -o looper`
 
 on Linux:
-`cc looper.c -ldl -lpthread -lm -o looper`
+`cc looper-desktop.c -ldl -lpthread -lm -o looper`
 
 on RaspberryPi:
-`cc looper.c -ldl -lpthread -lm -latomic -o looper`
+`cc looper.c bcm2835.c -ldl -lpthread -lm -latomic -o looper`
 
 ## Running
 
