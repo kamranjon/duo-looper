@@ -123,14 +123,14 @@ void leaveRecording(struct state * state) {
 
 void enterLoop(struct state * state) {
   ma_device_config outputDeviceConfig;
-
+  printf("Init File\n");
   if (ma_decoder_init_file(filename[state->fileIndex], NULL, state->outputDecoder) != MA_SUCCESS) {
     printf("Could not load file.wav\n");
     exit(-5);
   }
-
+  printf("Data source Set Next\n");
   ma_data_source_set_next(state->outputDecoder, state->outputDecoder);
-
+  printf("Possible initialize\n");
   if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped) {
     // Output Device config
     outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
@@ -146,7 +146,7 @@ void enterLoop(struct state * state) {
       exit(-6);
     }
   }
-
+  printf("Start Device\n");
   if (ma_device_start(state->outputDevice) != MA_SUCCESS) {
       printf("Failed to start playback device.\n");
       ma_device_uninit(state->outputDevice);
