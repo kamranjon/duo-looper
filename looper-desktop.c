@@ -91,26 +91,27 @@ void enterRecording(struct state * state) {
     exit(-1);
   }
 
-  ma_device_config inputDeviceConfig;
+  if(ma_device_get_state(state->inputDevice) != ma_device_state_stopped ) {
+    ma_device_config inputDeviceConfig;
 
-  // Input Device config
-  inputDeviceConfig = ma_device_config_init(ma_device_type_capture);
-  inputDeviceConfig.capture.format   = state->inputEncoder->config.format;
-  inputDeviceConfig.capture.channels = state->inputEncoder->config.channels;
-  // ** Uncomment the Following lines to specify an ALSA sound input device other than the default
-  // ma_device_id inputDeviceId;
-  // strcpy(inputDeviceId.alsa, "hw");
-  // inputDeviceConfig.capture.pDeviceID = &inputDeviceId;
-  inputDeviceConfig.sampleRate       = state->inputEncoder->config.sampleRate;
-  inputDeviceConfig.dataCallback     = data_callback;
-  inputDeviceConfig.pUserData        = state->inputEncoder;
+    // Input Device config
+    inputDeviceConfig = ma_device_config_init(ma_device_type_capture);
+    inputDeviceConfig.capture.format   = state->inputEncoder->config.format;
+    inputDeviceConfig.capture.channels = state->inputEncoder->config.channels;
+    // ** Uncomment the Following lines to specify an ALSA sound input device other than the default
+    // ma_device_id inputDeviceId;
+    // strcpy(inputDeviceId.alsa, "hw");
+    // inputDeviceConfig.capture.pDeviceID = &inputDeviceId;
+    inputDeviceConfig.sampleRate       = state->inputEncoder->config.sampleRate;
+    inputDeviceConfig.dataCallback     = data_callback;
+    inputDeviceConfig.pUserData        = state->inputEncoder;
 
-  result = ma_device_init(NULL, &inputDeviceConfig, state->inputDevice);
-  if (result != MA_SUCCESS) {
-    printf("Failed to initialize capture device.\n");
-    exit(-2);
+    result = ma_device_init(NULL, &inputDeviceConfig, state->inputDevice);
+    if (result != MA_SUCCESS) {
+      printf("Failed to initialize capture device.\n");
+      exit(-2);
+    }
   }
-
 
   result = ma_device_start(state->inputDevice);
   if (result != MA_SUCCESS) {
@@ -128,7 +129,7 @@ void recording(struct state * state) {
 }
 
 void leaveRecording(struct state * state) {
-  ma_device_uninit(state->inputDevice);
+  ma_device_stop(state->inputDevice);
   ma_encoder_uninit(state->inputEncoder);
   printf("Entering Loop State\n");
   state->next = enterLoop;
@@ -144,20 +145,22 @@ void enterLoop(struct state * state) {
 
   ma_data_source_set_next(state->outputDecoder, state->outputDecoder);
 
-  // Output Device config
-  outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
-  outputDeviceConfig.playback.format   = state->outputDecoder->outputFormat;
-  outputDeviceConfig.playback.channels = state->outputDecoder->outputChannels;
-  outputDeviceConfig.sampleRate        = state->outputDecoder->outputSampleRate;
-  outputDeviceConfig.dataCallback      = data_callbackOutput;
-  outputDeviceConfig.pUserData         = state->outputDecoder;
+  if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped ) {
 
-  if (ma_device_init(NULL, &outputDeviceConfig, state->outputDevice) != MA_SUCCESS) {
-    printf("Failed to open playback device.\n");
-    ma_decoder_uninit(state->outputDecoder);
-    exit(-6);
+    // Output Device config
+    outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
+    outputDeviceConfig.playback.format   = state->outputDecoder->outputFormat;
+    outputDeviceConfig.playback.channels = state->outputDecoder->outputChannels;
+    outputDeviceConfig.sampleRate        = state->outputDecoder->outputSampleRate;
+    outputDeviceConfig.dataCallback      = data_callbackOutput;
+    outputDeviceConfig.pUserData         = state->outputDecoder;
+
+    if (ma_device_init(NULL, &outputDeviceConfig, state->outputDevice) != MA_SUCCESS) {
+      printf("Failed to open playback device.\n");
+      ma_decoder_uninit(state->outputDecoder);
+      exit(-6);
+    }
   }
-
 
   if (ma_device_start(state->outputDevice) != MA_SUCCESS) {
       printf("Failed to start playback device.\n");
@@ -176,7 +179,7 @@ void looping(struct state * state) {
 }
 
 void leaveLoop(struct state * state) {
-  ma_device_uninit(state->outputDevice);
+  ma_device_stop(state->outputDevice);
   ma_decoder_uninit(state->outputDecoder);
   printf("Entering Idle State\n");
   state->next = enterIdle;
