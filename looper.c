@@ -165,7 +165,10 @@ void looping(struct state * state) {
 }
 
 void leaveLoop(struct state * state) {
+  printf("IN LEAVE LOOP\n");
+  printf("Device Stop\n");
   ma_device_stop(state->outputDevice);
+  printf("Uninit Decoder\n");
   ma_decoder_uninit(state->outputDecoder);
   state->fileIndex = state->fileIndex == 1 ? 0 : 1;
   printf("Entering Idle State\n");
