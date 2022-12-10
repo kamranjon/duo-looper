@@ -158,6 +158,7 @@ void enterLoop(struct state * state) {
 }
 
 void looping(struct state * state) {
+  printf("IN LOOP\n");
   if(buttonPressed()) {
     state->next = leaveLoop;
   }
