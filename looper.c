@@ -1,5 +1,5 @@
 #define MINIAUDIO_IMPLEMENTATION
-
+#define MA_DEBUG_OUTPUT
 #include "bcm2835.h"
 #include "miniaudio.h"
 #include <stdlib.h>
