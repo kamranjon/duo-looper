@@ -19,6 +19,7 @@ bool buttonPressed()  {
   state = (state<<1) | bcm2835_gpio_lev(PIN) | 0xfe00;
   return (state == 0xff00);
 }
+const char* filename[2] = {"filename1.wav", "filename2.wav"};
 
 struct state;
 typedef void state_fn(struct state *);
@@ -30,6 +31,7 @@ struct state
     ma_encoder * inputEncoder;
     ma_device * inputDevice;
     ma_device * outputDevice;
+    int fileIndex;
 };
 
 state_fn enterIdle, enterRecording, recording, leaveRecording, enterLoop, looping, leaveLoop;
@@ -69,7 +71,7 @@ void enterRecording(struct state * state) {
   ma_encoder_config inputEncoderConfig;
   inputEncoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 44100);
 
-  if (ma_encoder_init_file("file.wav", &inputEncoderConfig, state->inputEncoder) != MA_SUCCESS) {
+  if (ma_encoder_init_file(filename[state->fileIndex], &inputEncoderConfig, state->inputEncoder) != MA_SUCCESS) {
     printf("Failed to initialize output file.\n");
     exit(-1);
   }
@@ -122,7 +124,7 @@ void leaveRecording(struct state * state) {
 void enterLoop(struct state * state) {
   ma_device_config outputDeviceConfig;
 
-  if (ma_decoder_init_file("file.wav", NULL, state->outputDecoder) != MA_SUCCESS) {
+  if (ma_decoder_init_file(filename[state->fileIndex], NULL, state->outputDecoder) != MA_SUCCESS) {
     printf("Could not load file.wav\n");
     exit(-5);
   }
@@ -164,6 +166,7 @@ void looping(struct state * state) {
 void leaveLoop(struct state * state) {
   ma_device_stop(state->outputDevice);
   ma_decoder_uninit(state->outputDecoder);
+  state->fileIndex = state->fileIndex == 1 ? 0 : 1;
   printf("Entering Idle State\n");
   state->next = enterIdle;
 }
@@ -183,7 +186,7 @@ int main(int argc, char** argv)
   bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
   bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_UP);
 
-  struct state state = { enterIdle, &outputDecoder, &inputEncoder, &inputDevice, &outputDevice };
+  struct state state = { enterIdle, &outputDecoder, &inputEncoder, &inputDevice, &outputDevice, 0 };
   printf("Entering Idle State\n");
   while(state.next) state.next(&state);
 
