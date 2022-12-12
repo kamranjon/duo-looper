@@ -64,7 +64,7 @@ void enterRecording(struct state * state) {
     printf("Failed to initialize output file.\n");
     exit(-1);
   }
-  isRecording = TRUE;
+  isRecording = true;
 
   state->next = recording;
 }
@@ -77,7 +77,7 @@ void recording(struct state * state) {
 
 void leaveRecording(struct state * state) {
   ma_encoder_uninit(&inputEncoder);
-  isRecording = FALSE;
+  isRecording = false;
   printf("Entering Loop State\n");
   state->next = enterLoop;
 }
@@ -88,7 +88,7 @@ void enterLoop(struct state * state) {
     printf("Could not load file.wav\n");
     exit(-5);
   }
-  isLooping = TRUE;
+  isLooping = true;
   ma_data_source_set_next(&outputDecoder, &outputDecoder);
   state->next = looping;
 }
@@ -101,7 +101,7 @@ void looping(struct state * state) {
 
 void leaveLoop(struct state * state) {
   ma_decoder_uninit(&outputDecoder);
-  isLooping = FALSE;
+  isLooping = false;
   printf("Entering Idle State\n");
   state->next = enterIdle;
 }
@@ -143,8 +143,8 @@ int main(int argc, char** argv)
   inputDeviceConfig.playback.pDeviceID = &inputDeviceId;
   inputDeviceConfig.sampleRate       = inputEncoderConfig.sampleRate;
   inputDeviceConfig.dataCallback     = data_callback;
-  isLooping        = FALSE;
-  isRecording = FALSE;
+  isLooping        = false;
+  isRecording = false;
 
   result = ma_device_init(NULL, &inputDeviceConfig, &inputDevice);
   if (result != MA_SUCCESS) {
