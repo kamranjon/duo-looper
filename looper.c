@@ -20,14 +20,16 @@ bool buttonPressed()  {
   return (state == 0xff00);
 }
 
+
+size_t audioBufferSizeInBytes = 0;
+char* audioBuffer = NULL;
+
 struct state;
 typedef void state_fn(struct state *);
 
 struct state
 {
     state_fn * next;
-    ma_decoder * outputDecoder;
-    ma_encoder * inputEncoder;
     ma_device * inputDevice;
     ma_device * outputDevice;
 };
@@ -37,28 +39,38 @@ state_fn enterIdle, enterRecording, recording, leaveRecording, enterLoop, loopin
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-  ma_encoder* pEncoder = (ma_encoder*)pDevice->pUserData;
-  MA_ASSERT(pEncoder != NULL);
-  ma_encoder_write_pcm_frames(pEncoder, pInput, frameCount, NULL);
+  size_t inputBufferSizeInBytes = ma_get_bytes_per_frame(pDevice->capture.format, pDevice->capture.channels) * frameCount;
+  size_t newAudioBufferSizeInBytes = audioBufferSizeInBytes + inputBufferSizeInBytes;
+  char* newAudioBuffer = (char*)realloc(audioBuffer, newAudioBufferSizeInBytes);
+  if (newAudioBuffer == NULL) {
+      // Getting here means you're out of memory.
+      return;
+  }
+
+  // Getting here means buffer expansion was successful.
+  memcpy(newAudioBuffer + audioBufferSizeInBytes, pInput, inputBufferSizeInBytes);
+  audioBufferSizeInBytes = newAudioBufferSizeInBytes;
+  audioBuffer = newAudioBuffer;
+
   (void)pOutput;
 }
 
 void data_callbackOutput(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-    ma_decoder* pDecoder = (ma_decoder*)pDevice->pUserData;
-    if (pDecoder == NULL) {
+
+    ma_audio_buffer* pBuffer = (ma_audio_buffer*)pDevice->pUserData;
+    if (pBuffer == NULL) {
         return;
     }
 
-    /* Reading PCM frames will loop based on what we specified when called ma_data_source_set_looping(). */
-    ma_data_source_read_pcm_frames(pDecoder, pOutput, frameCount, NULL);
+    ma_data_source_read_pcm_frames(pBuffer, pOutput, frameCount, NULL);
 
     (void)pInput;
 }
 
 
 void enterIdle(struct state * state){
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = enterRecording;
   }
 }
@@ -66,35 +78,26 @@ void enterIdle(struct state * state){
 void enterRecording(struct state * state) {
   printf("Entering Recording State\n");
   ma_result result;
-  ma_encoder_config inputEncoderConfig;
-  inputEncoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 44100);
 
-  if (ma_encoder_init_file("file.wav", &inputEncoderConfig, state->inputEncoder) != MA_SUCCESS) {
-    printf("Failed to initialize output file.\n");
-    exit(-1);
-  }
-  // if the device isn't stopped - the device hasn't been initialized yet
-  if(ma_device_get_state(state->inputDevice) != ma_device_state_stopped) {
+  if(ma_device_get_state(state->inputDevice) != ma_device_state_stopped ) {
     ma_device_config inputDeviceConfig;
 
     // Input Device config
     inputDeviceConfig = ma_device_config_init(ma_device_type_capture);
-    inputDeviceConfig.capture.format   = state->inputEncoder->config.format;
-    inputDeviceConfig.capture.channels = state->inputEncoder->config.channels;
+    inputDeviceConfig.capture.format   = ma_format_f32;
+    inputDeviceConfig.capture.channels = 2;
     // ** Uncomment the Following lines to specify an ALSA sound input device other than the default
     ma_device_id inputDeviceId;
     strcpy(inputDeviceId.alsa, "hw");
     inputDeviceConfig.capture.pDeviceID = &inputDeviceId;
-    inputDeviceConfig.sampleRate       = state->inputEncoder->config.sampleRate;
+    inputDeviceConfig.sampleRate       = 44100;
     inputDeviceConfig.dataCallback     = data_callback;
-    inputDeviceConfig.pUserData        = state->inputEncoder;
 
     result = ma_device_init(NULL, &inputDeviceConfig, state->inputDevice);
     if (result != MA_SUCCESS) {
       printf("Failed to initialize capture device.\n");
       exit(-2);
     }
-
   }
 
   result = ma_device_start(state->inputDevice);
@@ -107,14 +110,13 @@ void enterRecording(struct state * state) {
 }
 
 void recording(struct state * state) {
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = leaveRecording;
   }
 }
 
 void leaveRecording(struct state * state) {
   ma_device_stop(state->inputDevice);
-  ma_encoder_uninit(state->inputEncoder);
   printf("Entering Loop State\n");
   state->next = enterLoop;
 }
@@ -122,25 +124,17 @@ void leaveRecording(struct state * state) {
 void enterLoop(struct state * state) {
   ma_device_config outputDeviceConfig;
 
-  if (ma_decoder_init_file("file.wav", NULL, state->outputDecoder) != MA_SUCCESS) {
-    printf("Could not load file.wav\n");
-    exit(-5);
-  }
+  if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped ) {
 
-  ma_data_source_set_next(state->outputDecoder, state->outputDecoder);
-
-  if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped) {
     // Output Device config
     outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
-    outputDeviceConfig.playback.format   = state->outputDecoder->outputFormat;
-    outputDeviceConfig.playback.channels = state->outputDecoder->outputChannels;
-    outputDeviceConfig.sampleRate        = state->outputDecoder->outputSampleRate;
+    outputDeviceConfig.playback.format   = ma_format_f32;
+    outputDeviceConfig.playback.channels = 2;
+    outputDeviceConfig.sampleRate        = 44100;
     outputDeviceConfig.dataCallback      = data_callbackOutput;
-    outputDeviceConfig.pUserData         = state->outputDecoder;
 
     if (ma_device_init(NULL, &outputDeviceConfig, state->outputDevice) != MA_SUCCESS) {
       printf("Failed to open playback device.\n");
-      ma_decoder_uninit(state->outputDecoder);
       exit(-6);
     }
   }
@@ -148,31 +142,48 @@ void enterLoop(struct state * state) {
   if (ma_device_start(state->outputDevice) != MA_SUCCESS) {
       printf("Failed to start playback device.\n");
       ma_device_uninit(state->outputDevice);
-      ma_decoder_uninit(state->outputDecoder);
       exit(-7);
   }
+
+  ma_audio_buffer_config config = ma_audio_buffer_config_init(
+      ma_format_f32,
+      2,
+      audioBufferSizeInBytes / ma_get_bytes_per_frame(ma_format_f32, 2),
+      audioBuffer,
+      NULL);
+
+
+  ma_audio_buffer buffer;
+  if (ma_audio_buffer_init(&config, &buffer) != MA_SUCCESS) {
+    // Error.
+    printf("Failed to initialize audio buffer.\n");
+    ma_device_uninit(state->outputDevice);
+    exit(-7);
+  }
+  state->outputDevice->pUserData = &buffer;
+
+  ma_data_source_set_next(&buffer, &buffer);
 
   state->next = looping;
 }
 
 void looping(struct state * state) {
-  if(buttonPressed()) {
+  if(_kbhit()) {
     state->next = leaveLoop;
   }
 }
 
 void leaveLoop(struct state * state) {
   ma_device_stop(state->outputDevice);
-  ma_decoder_uninit(state->outputDecoder);
+  free(audioBuffer);
+  audioBuffer = NULL;
+  audioBufferSizeInBytes = 0;
   printf("Entering Idle State\n");
   state->next = enterIdle;
 }
-
 int main(int argc, char** argv)
 {
   ma_result result;
-  ma_encoder inputEncoder;
-  ma_decoder outputDecoder;
   ma_device inputDevice;
   ma_device outputDevice;
 
@@ -189,8 +200,6 @@ int main(int argc, char** argv)
 
   ma_device_uninit(&outputDevice);
   ma_device_uninit(&inputDevice);
-  ma_encoder_uninit(&inputEncoder);
-  ma_decoder_uninit(&outputDecoder);
 
   return 0;
 }
