@@ -140,20 +140,21 @@ void enterLoop(struct state * state) {
   ma_device_config outputDeviceConfig;
 
   if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped ) {
-
+    printf("INSIDE DEVICE INIT\n");
     // Output Device config
     outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
     outputDeviceConfig.playback.format   = ma_format_f32;
     outputDeviceConfig.playback.channels = 2;
     outputDeviceConfig.sampleRate        = 44100;
     outputDeviceConfig.dataCallback      = data_callbackOutput;
-    //outputDeviceConfig.pUserData         = audioBuffer;
 
     if (ma_device_init(NULL, &outputDeviceConfig, state->outputDevice) != MA_SUCCESS) {
       printf("Failed to open playback device.\n");
       exit(-6);
     }
   }
+
+  printf("STARTING OUTPUT DEVICE\n");
 
   if (ma_device_start(state->outputDevice) != MA_SUCCESS) {
       printf("Failed to start playback device.\n");
@@ -170,16 +171,18 @@ void enterLoop(struct state * state) {
 
 
   ma_audio_buffer buffer;
+  printf("MA_AUDO BUFFER INIT\n");
   if (ma_audio_buffer_init(&config, &buffer) != MA_SUCCESS) {
     // Error.
     printf("Failed to initialize audio buffer.\n");
     ma_device_uninit(state->outputDevice);
     exit(-7);
   }
+  printf("OVERWRITING PUSERDATA\n");
   state->outputDevice->pUserData = &buffer;
-
+  printf("SET NEXT DATASOURCE\n");
   ma_data_source_set_next(&buffer, &buffer);
-
+  printf("START LOOPING\n");
   state->next = looping;
 }
 
