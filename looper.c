@@ -70,7 +70,7 @@ void data_callbackOutput(ma_device* pDevice, void* pOutput, const void* pInput, 
 
 
 void enterIdle(struct state * state){
-  if(_kbhit()) {
+  if(buttonPressed()) {
     state->next = enterRecording;
   }
 }
@@ -110,7 +110,7 @@ void enterRecording(struct state * state) {
 }
 
 void recording(struct state * state) {
-  if(_kbhit()) {
+  if(buttonPressed()) {
     state->next = leaveRecording;
   }
 }
@@ -168,7 +168,7 @@ void enterLoop(struct state * state) {
 }
 
 void looping(struct state * state) {
-  if(_kbhit()) {
+  if(buttonPressed()) {
     state->next = leaveLoop;
   }
 }
