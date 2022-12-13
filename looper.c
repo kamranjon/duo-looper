@@ -194,7 +194,7 @@ int main(int argc, char** argv)
   bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
   bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_UP);
 
-  struct state state = { enterIdle, &outputDecoder, &inputEncoder, &inputDevice, &outputDevice };
+  struct state state = { enterIdle, &inputDevice, &outputDevice };
   printf("Entering Idle State\n");
   while(state.next) state.next(&state);
 
