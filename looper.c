@@ -7,17 +7,11 @@
 #include <sys/ioctl.h>
 #include <stdbool.h>
 
-// Arrange button between pin 37 and ground (PULL UP)
-#define PIN RPI_V2_GPIO_P1_37
 
-// SPACE BAR IS OUR BUTTON
-#define BUFFERSIZE 2
+#define PINT RPI_V2_GPIO_P1_36
 
-// this is a simple input debounce: https://www.e-tinkers.com/2021/05/the-simplest-button-debounce-solution/
-bool buttonPressed()  {
-  static uint16_t state = 0;
-  state = (state<<1) | bcm2835_gpio_lev(PIN) | 0xfe00;
-  return (state == 0xff00);
+bool buttonActive() {
+  return bcm2835_gpio_lev(PINT) == 0 ? false : true;
 }
 
 struct state;
@@ -58,7 +52,7 @@ void data_callbackOutput(ma_device* pDevice, void* pOutput, const void* pInput, 
 
 
 void enterIdle(struct state * state){
-  if(buttonPressed()) {
+  if(buttonActive()) {
     state->next = enterRecording;
   }
 }
@@ -107,16 +101,18 @@ void enterRecording(struct state * state) {
 }
 
 void recording(struct state * state) {
-  if(buttonPressed()) {
+  if(!buttonActive()) {
     state->next = leaveRecording;
   }
 }
 
 void leaveRecording(struct state * state) {
-  ma_device_stop(state->inputDevice);
-  ma_encoder_uninit(state->inputEncoder);
-  printf("Entering Loop State\n");
-  state->next = enterLoop;
+  if(buttonActive()) {
+    ma_device_stop(state->inputDevice);
+    ma_encoder_uninit(state->inputEncoder);
+    printf("Entering Loop State\n");
+    state->next = enterLoop;
+  }
 }
 
 void enterLoop(struct state * state) {
@@ -132,6 +128,11 @@ void enterLoop(struct state * state) {
   if(ma_device_get_state(state->outputDevice) != ma_device_state_stopped) {
     // Output Device config
     outputDeviceConfig = ma_device_config_init(ma_device_type_playback);
+
+    ma_device_id outputDeviceId;
+    strcpy(outputDeviceId.alsa, "hw");
+    outputDeviceConfig.playback.pDeviceID = &outputDeviceId;
+
     outputDeviceConfig.playback.format   = state->outputDecoder->outputFormat;
     outputDeviceConfig.playback.channels = state->outputDecoder->outputChannels;
     outputDeviceConfig.sampleRate        = state->outputDecoder->outputSampleRate;
@@ -156,7 +157,7 @@ void enterLoop(struct state * state) {
 }
 
 void looping(struct state * state) {
-  if(buttonPressed()) {
+  if(!buttonActive()) {
     state->next = leaveLoop;
   }
 }
@@ -178,10 +179,6 @@ int main(int argc, char** argv)
 
   // Init PI Library
   if (!bcm2835_init()) return 1;
-
-  // Set the pin to be an output
-  bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
-  bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_UP);
 
   struct state state = { enterIdle, &outputDecoder, &inputEncoder, &inputDevice, &outputDevice };
   printf("Entering Idle State\n");
